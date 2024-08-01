@@ -32,8 +32,9 @@ mod tests {
 *Debug Log display only when Set environment variable `RUST_LOG="debug"`* <br>
 And you will got log/TestLog with 2 log files: `TestLog.log`, `TestLog_xxxxxxxx.log`
 
-## No global instance LogUtil(No class)
-If you don't want to use LogUtil with class, init LogUtil with:
+## No global instance LogUtil(No log file out)
+If you don't want to use LogUtil with a global variable instance, init LogUtil with:
 ```rust
 LogUtil::init().unwrap()
 ```
+Log messages will only print to console, no log file output.

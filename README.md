@@ -5,10 +5,15 @@ A log tool written in Rust that can work in conjunction with the log component o
 ```rust
 #[cfg(test)]
 mod tests {
+    use lazy_static::lazy_static;
     use log::{debug, error, info, warn};
     use log_util::LogUtil;
 
     use super::*;
+
+    lazy_static! {
+        static ref BASE_LOG: LogUtil = LogUtil::new("TestLog");
+    }
 
     #[test]
     fn test_log() {

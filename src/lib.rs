@@ -1,19 +1,17 @@
-use lazy_static::lazy_static;
-use log_util::LogUtil;
-
-pub mod log_util;
 pub mod log_level;
-
-lazy_static! {
-    static ref BASE_LOG: LogUtil = LogUtil::new("TestLog");
-}
+pub mod log_util;
 
 #[cfg(test)]
 mod tests {
+    use lazy_static::lazy_static;
     use log::{debug, error, info, warn};
     use log_util::LogUtil;
 
     use super::*;
+
+    lazy_static! {
+        static ref BASE_LOG: LogUtil = LogUtil::new("TestLog");
+    }
 
     #[test]
     fn test_log() {

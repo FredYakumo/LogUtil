@@ -274,10 +274,10 @@ impl log::Log for LogUtil {
             } else {
                 String::new()
             };
-            // For Error level, also include line number
+            // For Error level, include file and line number
             let error_location_str = if !IS_RELEASE {
-                if let (Some(module_path), Some(line)) = (record.module_path(), record.line()) {
-                    format!("{} ", format!("[{module_path}:{line}]").bright_black())
+                if let (Some(file), Some(line)) = (record.file(), record.line()) {
+                    format!("{} ", format!("[{file}:{line}]").bright_black())
                 } else {
                     String::new()
                 }
@@ -339,8 +339,8 @@ impl log::Log for LogUtil {
             let file_location_str = if !IS_RELEASE {
                 match record.level() {
                     Level::Error => {
-                        if let (Some(module_path), Some(line)) = (record.module_path(), record.line()) {
-                            format!("[{module_path}:{line}] ")
+                        if let (Some(file), Some(line)) = (record.file(), record.line()) {
+                            format!("[{file}:{line}] ")
                         } else {
                             String::new()
                         }

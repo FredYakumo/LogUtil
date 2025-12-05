@@ -122,6 +122,7 @@ macro_rules! output_log_ln {
 lazy_static! {
     static ref LOGGER: LogUtil = LogUtil {
         class_name: "",
+        log_base_path: PathBuf::from(DEFAULT_LOG_DIR),
         out_log_file: None,
         out_log_file_line_position: None,
         out_log_date_file: None,
@@ -134,6 +135,7 @@ lazy_static! {
 
 pub struct LogUtil {
     class_name: &'static str,
+    log_base_path: PathBuf,
     out_log_file: Option<Arc<Mutex<File>>>,
     out_log_file_line_position: Option<Arc<Mutex<u64>>>,
     out_log_date_file: Option<Arc<Mutex<File>>>,
@@ -164,7 +166,7 @@ impl LogUtil {
                 let mut out_log_date_locked = self.out_log_date.lock().unwrap();
                 if now.date_naive() != *out_log_date_locked {
                     // The dates are inconsistent; the logs need to be rolled over
-                    let log_dir = get_or_create_log_dir(self.class_name);
+                    let log_dir = get_or_create_log_dir_with_base(&self.log_base_path, self.class_name);
                     let out_file_path = log_dir.join(format!("{}.log", self.class_name).as_str());
                     let out_file = OpenOptions::new()
                         .write(true)
@@ -296,7 +298,7 @@ impl log::Log for LogUtil {
                 let mut out_log_date_locked = self.out_log_date.lock().unwrap();
                 if now.date_naive() != *out_log_date_locked {
                     // The dates are inconsistent; the logs need to be rolled over.
-                    let log_dir = get_or_create_log_dir(self.class_name);
+                    let log_dir = get_or_create_log_dir_with_base(&self.log_base_path, self.class_name);
                     let out_file_path = log_dir.join(format!("{}.log", self.class_name).as_str());
                     let out_file = OpenOptions::new()
                         .write(true)
@@ -333,6 +335,27 @@ impl log::Log for LogUtil {
                 }
             }
             // Write normally to the log of the current day
+            // Generate file location string (without color for file output)
+            let file_location_str = if !IS_RELEASE {
+                match record.level() {
+                    Level::Error => {
+                        if let (Some(module_path), Some(line)) = (record.module_path(), record.line()) {
+                            format!("[{module_path}:{line}] ")
+                        } else {
+                            String::new()
+                        }
+                    }
+                    _ => {
+                        if let Some(module_path) = record.module_path() {
+                            format!("[{module_path}] ")
+                        } else {
+                            String::new()
+                        }
+                    }
+                }
+            } else {
+                String::new()
+            };
             if let (Some(write_file), Some(line_position)) = (
                 self.out_log_file.as_ref(),
                 self.out_log_file_line_position.as_ref(),
@@ -341,9 +364,10 @@ impl log::Log for LogUtil {
                 let now_time = get_now_time_str!();
                 writeln!(
                     write_file,
-                    "[{} {}] {}",
+                    "[{} {}] {}{}",
                     now_time,
                     record.level(),
+                    file_location_str,
                     record.args()
                 )
                 .unwrap_or_else(|_f| {});
@@ -359,9 +383,10 @@ impl log::Log for LogUtil {
                 let now_time = get_now_time_str!();
                 writeln!(
                     write_file,
-                    "[{} {}] {}",
+                    "[{} {}] {}{}",
                     now_time,
                     record.level(),
+                    file_location_str,
                     record.args()
                 )
                 .unwrap_or_else(|_f| {});
@@ -386,15 +411,17 @@ fn fetch_max_level_from_env() -> LevelFilter {
     }
 }
 
-fn get_or_create_log_dir(class_name: &str) -> PathBuf {
-    let log_dir = Path::new("log");
+const DEFAULT_LOG_DIR: &str = "log";
+
+fn get_or_create_log_dir_with_base<P: AsRef<Path>>(base_path: P, class_name: &str) -> PathBuf {
+    let log_dir = base_path.as_ref();
     if !log_dir.exists() {
-        fs::create_dir(log_dir).expect("Create log dir failed.");
+        fs::create_dir_all(log_dir).expect("Create log dir failed.");
     }
     let log_dir = log_dir.join(class_name);
     if !log_dir.exists() {
-        fs::create_dir(log_dir.clone())
-            .unwrap_or_else(|_| panic!("Create log/{class_name} dir failed."));
+        fs::create_dir_all(log_dir.clone())
+            .unwrap_or_else(|_| panic!("Create {}/{class_name} dir failed.", base_path.as_ref().display()));
     }
     log_dir
 }
@@ -409,12 +436,18 @@ impl LogUtil {
         log::set_logger(logger).map(|()| log::set_max_level(max_level))?;
         Ok(logger)
     }
+    
     pub fn new(class_name: &'static str) -> LogUtil {
+        Self::new_with_path(class_name, DEFAULT_LOG_DIR)
+    }
+    
+    pub fn new_with_path<P: AsRef<Path>>(class_name: &'static str, log_path: P) -> LogUtil {
+        let log_base_path = PathBuf::from(log_path.as_ref());
         let now_date = chrono::Local::now().date_naive();
         let (out_file, out_date_file) = if class_name.is_empty() {
             (None, None)
         } else {
-            let log_dir = get_or_create_log_dir(class_name);
+            let log_dir = get_or_create_log_dir_with_base(&log_base_path, class_name);
             let now_date_str = now_date.format("%Y%m%d").to_string();
             let out_file_path = log_dir.join(format!("{class_name}.log").as_str());
             let out_file = Arc::new(Mutex::new(
@@ -456,6 +489,7 @@ impl LogUtil {
         };
         LogUtil {
             class_name,
+            log_base_path,
             out_log_file: out_file,
             out_log_file_line_position: Some(Arc::new(Mutex::new(0))),
             out_log_date_file: out_date_file,

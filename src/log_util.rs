@@ -262,22 +262,33 @@ impl log::Log for LogUtil {
             let now = chrono::Local::now();
             let now_str = now.format("%Y-%m-%d %H:%M:%S");
             let now_date_str = now.format("%Y%m%d");
-            match record.level() {
-                Level::Debug => output_debug_log_ln!(now_str, "{}", record.args()),
-                Level::Error => {
-                    let log_location_str = if !IS_RELEASE {
-                        if let (Some(file), Some(line)) = (record.file(), record.line()) {
-                            format!("[{file}:{line}] ")
-                        } else {
-                            String::new()
-                        }
-                    } else {
-                        String::new()
-                    };
-                    output_error_log_ln!(now_str, "{}{}", log_location_str, record.args())
+            // Display module path in gray for non-release builds
+            let log_location_str = if !IS_RELEASE {
+                if let Some(module_path) = record.module_path() {
+                    format!("{} ", format!("[{module_path}]").bright_black())
+                } else {
+                    String::new()
                 }
-                Level::Warn => output_warn_log_ln!(now_str, "{}", record.args()),
-                _ => output_info_log_ln!(now_str, "{}", record.args()),
+            } else {
+                String::new()
+            };
+            // For Error level, also include line number
+            let error_location_str = if !IS_RELEASE {
+                if let (Some(module_path), Some(line)) = (record.module_path(), record.line()) {
+                    format!("{} ", format!("[{module_path}:{line}]").bright_black())
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+            match record.level() {
+                Level::Debug => output_debug_log_ln!(now_str, "{}{}", log_location_str, record.args()),
+                Level::Error => {
+                    output_error_log_ln!(now_str, "{}{}", error_location_str, record.args())
+                }
+                Level::Warn => output_warn_log_ln!(now_str, "{}{}", log_location_str, record.args()),
+                _ => output_info_log_ln!(now_str, "{}{}", log_location_str, record.args()),
             }
             if let (Some(write_file), Some(write_date_file)) =
                 (self.out_log_file.as_ref(), self.out_log_date_file.as_ref())
